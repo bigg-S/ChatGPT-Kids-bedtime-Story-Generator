@@ -1,35 +1,37 @@
 # this class implements a logic that generates audio from a given text data
+import io
 import requests
 import logging
 import json
+from pathlib import Path
+from openai import OpenAI
 
 class AudioGenerator:
     logger = logging.getLogger(__name__)
     
     @staticmethod
-    def generate_audio(text, temperature, api_key):
-        url = "https://api.openai.com/v1/audio/speech"
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
-        }
-        data = {
-            "model": "tts-1",
-            "input": text,
-            "voice": "alloy",
-            "temperature": temperature
-        }
+    def generate_audio(text, api_key):
+        client = OpenAI(api_key=api_key)
+        speech_file_path = Path(__file__).parent/"speech.mp3"
+        
         try:
-            response = requests.post(url, json=data, headers=headers)
-            response.raise_for_status()  # Raise exception for non-200 status codes
+            response = client.audio.speech.create(
+                model="tts-1",
+                voice="alloy",
+                input=text
+            )
+            
+            response.stream_to_file(speech_file_path)
 
-            content_type = response.headers.get("Content-Type")
-            if content_type != "audio/mpeg":
-                raise ValueError(f"Unexpected content type in response: {content_type}")
+            # content_type = response.
+            # if content_type != "audio/mpeg":
+            #     raise ValueError(f"Unexpected content type in response: {content_type}")
+            
+            audio_content = response.content
 
             AudioGenerator.logger.info('Audio generated successfully!')
             
-            return response.content
+            return audio_content
 
         except requests.exceptions.RequestException as e:
             AudioGenerator.logger.error("Error making API request:", exc_info=e)
