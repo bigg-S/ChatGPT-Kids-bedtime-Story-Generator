@@ -1,6 +1,7 @@
 # The following class implements a logic that generates an mp4 track from an image and an audio file 
 from moviepy.editor import AudioFileClip, ImageClip, CompositeVideoClip
 import logging
+from pathlib import Path
 
 class AudioImageCombiner:
     logger = logging.getLogger(__name__)
@@ -8,6 +9,7 @@ class AudioImageCombiner:
     @staticmethod
     def combine(audio_content, image_data, output_file="bedtime_story.mp4"):
         try:
+            video_file_path = Path(__file__).parent/output_file
             # Load audio file
             audio = AudioFileClip(audio_content)
 
@@ -20,7 +22,7 @@ class AudioImageCombiner:
             video.fps = 30
 
             # Export the final video with the same audio file extension
-            video.write_videofile(output_file, audio_codec='aac', codec="libx264")
+            video.write_videofile(video_file_path, audio_codec='aac', codec="libx264")
             
             AudioImageCombiner.logger.info('Audio and image combined successfully!')
             
