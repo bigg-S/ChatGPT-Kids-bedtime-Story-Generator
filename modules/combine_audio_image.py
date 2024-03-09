@@ -6,7 +6,7 @@ class AudioImageCombiner:
     logger = logging.getLogger(__name__)
     
     @staticmethod
-    def combine(audio_content, image_data, output_file="combined_audio_image.mp4"):
+    def combine(audio_content, image_data, output_file="bedtime_story.mp4"):
         try:
             # Load audio file
             audio = AudioFileClip(audio_content)
@@ -15,10 +15,12 @@ class AudioImageCombiner:
             image = ImageClip(image_data, duration=audio.duration)
             
             # create a video clip
-            video = CompositeVideoClip([image]).set_audio(audio)
+            video = image.set_audio(audio)
+            
+            video.fps = 30
 
             # Export the final video with the same audio file extension
-            video.write_videofile("combined_audio_image.mp4", audio_codec='aac', fps=24, codec="libx264")
+            video.write_videofile(output_file, audio_codec='aac', codec="libx264")
             
             AudioImageCombiner.logger.info('Audio and image combined successfully!')
             
