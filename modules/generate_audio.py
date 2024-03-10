@@ -12,7 +12,6 @@ class AudioGenerator:
     @staticmethod
     def generate_audio(text, api_key):
         client = OpenAI(api_key=api_key)
-        speech_file_path = Path(__file__).parent/"speech.mp3"
         
         try:
             response = client.audio.speech.create(
@@ -21,17 +20,13 @@ class AudioGenerator:
                 input=text
             )
             
-            response.stream_to_file(speech_file_path)
-
-            # content_type = response.
-            # if content_type != "audio/mpeg":
-            #     raise ValueError(f"Unexpected content type in response: {content_type}")
-            
-            audio_content = response.content
+            audio_buffer = io.BytesIO()
+            audio_buffer.write(response.content)
+            audio_buffer.seek(0)
 
             AudioGenerator.logger.info('Audio generated successfully!')
             
-            return audio_content
+            return audio_buffer
 
         except requests.exceptions.RequestException as e:
             AudioGenerator.logger.error("Error making API request:", exc_info=e)

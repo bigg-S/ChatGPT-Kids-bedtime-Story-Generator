@@ -3,6 +3,7 @@ from PIL import Image
 from io import BytesIO
 import logging
 import json
+import numpy as np
 from openai import OpenAI
 
 class ImageGenerator:
@@ -27,6 +28,7 @@ class ImageGenerator:
             image_response = requests.get(image_url)
             image_response.raise_for_status()  # Raise an exception if image retrieval fails
             image = Image.open(BytesIO(image_response.content))
+            image = np.array(image)
             
             print(image_url)
             
