@@ -30,8 +30,6 @@ class ImageGenerator:
             image = Image.open(BytesIO(image_response.content))
             image = np.array(image)
             
-            print(image_url)
-            
             ImageGenerator.logger.info('Image generated successfully!')
             return image
         

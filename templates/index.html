@@ -3,18 +3,99 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bedtime Story Generator</title>
-    <link rel="stylesheet" href="static/css/styles.css">
+    <title>Bedtime Story Maker</title>
+    <link href="../static/css/output.css" rel="stylesheet"/>
+    <link rel="icon" type="image/png" href="../static/assets/logo.png">
+    <style>
+        .error-message {
+            color: red
+        }
+    </style>
 </head>
-<body>
-    <div class="container">
-        <h1>Bedtime Story Generator</h1>
-        <input type="text" id="storyTitle" placeholder="Enter story title">
-        <button onclick="generateStory()">Generate Story</button>
-        <div id="storyDisplay"></div>
-        <button onclick="toggleView()">Toggle View</button>
-    </div>
+<body class="bg-gray-100 flex flex-col min-h-screen">
+    <!-- Header -->
+    <header class="bg-white shadow-lg p-4 flex justify-between items-center px-8 py-4">
+        <!-- Logo -->
+        <img src="../static/assets/logo1.png" alt="Logo" class="h-8">
+        <!-- Hamburger Menu (Visible on mobile) -->
+        <button id="menuToggle" class="block md:hidden bg-gray-500 rounded-lg">
+            <svg class="w-6 h-6 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M4 6h16M4 12h16M4 18h16"></path>
+            </svg>
+        </button>
+        <!-- Dropdown Menu (Visible on mobile) -->
+        <div id="mobileMenu" class="hidden md:hidden absolute bg-white top-16 right-4 p-4 rounded-lg shadow-lg">
+            <!-- Home Button (Visible when signed in) -->
+            <button onclick="window.location.href='http://www.frankywright.com/'" class="block w-full text-left py-2 px-4 mb-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:bg-blue-600">Home</button>
 
-    <script src="static/js/script.js"></script>
+            <!-- Logout Button (Visible when signed in) -->
+            <!--<button class="block w-full text-left py-2 px-4 mb-2 bg-red-500 text-white rounded-lg hover:bg-red-600 focus:outline-none focus:bg-red-600">Logout</button>-->
+            <!-- Sign in Button (Visible when signed out) -->
+            <!--<button class="block w-full text-left py-2 px-4 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none focus:bg-green-600">Sign in</button>-->
+        </div>
+        <!-- Buttons (Visible on desktop) -->
+        <div id="desktopMenu" class="hidden md:flex">
+            <!-- Home Button (Visible when signed in) -->
+            <button onclick="window.location.href='http://www.frankywright.com/'" class="block w-full text-left py-2 px-4 mb-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:bg-blue-600">Home</button>
+
+            <!-- Logout Button (Visible when signed in) -->
+            <!--<button class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-600 focus:outline-none focus:bg-red-600">Logout</button>-->
+            <!-- Sign in Button (Visible when signed out) -->
+            <!--<button class="bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 focus:outline-none focus:bg-green-600">Sign in</button>-->
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow flex flex-col md:flex-row px-8 py-4">
+        <!-- Left Section -->
+        <section class="md:w-3/4 p-4">
+            <div class="mb-4">
+                <label for="storyTitle" class="block font-bold">Enter Story Title</label>
+                <div class="flex">
+                    <input type="text" id="storyTitle" placeholder="Enter story title" class="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-l-lg focus:outline-none focus:border-blue-500">
+                    <button id="generateButton" onclick="generateStory()" class="bg-blue-500 text-white py-2 px-4 rounded-r-lg md:ml-2 mt-2 md:mt-0 hover:bg-blue-600 focus:outline-none focus:bg-blue-600">Generate</button>
+                </div>
+            </div>
+            <div id="storyDisplay" class="mt-4 p-4 bg-white rounded-lg border border-gray-300">
+                <!-- Display loading symbol and text -->
+                <p id="loadingMessage" class="text-gray-500">No story to display</p>
+            </div>
+        </section>
+
+        <!-- Right Section -->
+        <aside class="md:w-1/4 p-4">
+            <label for="searchStory" class="block font-bold">Search Story</label>
+            <div class="flex">
+                <input type="text" id="searchStory" placeholder="Search Story" class="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-l-lg focus:outline-none focus:border-blue-500">
+                <button class="bg-blue-500 text-white py-2 px-4 rounded-r-lg md:ml-2 mt-2 md:mt-0 hover:bg-blue-600 focus:outline-none focus:bg-blue-600">Search</button>
+            </div>
+            <div id="searchResults" class="mt-4 p-4 bg-white rounded-lg border border-gray-300">
+                <!-- Display search results here -->
+                <p class="text-gray-500">You have no stories yet</p>
+            </div>
+        </aside>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white p-4 text-center">
+        &copy; <span id="currentYear"></span> Bedtime Story Generator. All rights reserved.
+    </footer>
+
+    <!-- JavaScript for toggling mobile menu -->
+    <script>
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+        document.getElementById('menuToggle').addEventListener('click', function() {
+            document.getElementById('mobileMenu').classList.toggle('hidden');
+        });
+
+        // Function to clear the title input field
+        function clearTitleInput() {
+            document.getElementById('storyTitle').value = '';
+        }
+
+        // Call the function when the page is loaded
+        window.onload = clearTitleInput;
+    </script>
+    <script src="../static/js/script.js"></script>
 </body>
 </html>
