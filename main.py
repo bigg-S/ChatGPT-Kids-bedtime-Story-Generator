@@ -1,4 +1,5 @@
 import os
+import base64
 from flask import Flask, jsonify, request, render_template
 from dotenv import load_dotenv
 from modules.generate_story import StoryGenerator
@@ -32,9 +33,12 @@ def generate_bedtime_story():
 
     # Combine audio with image
     combined_audio_image = AudioImageCombiner.combine(audio_content=audio_content, image_data=image)
+    
+    # Encode the combined_audio_image using base64 encoding
+    combined_audio_image_base64 = base64.b64encode(combined_audio_image).decode('utf-8')
 
     # Return combined audio with image
-    return jsonify({"message": "Bedtime story generated successfully.", "audio_with_image": combined_audio_image, "story_text": story_text})
+    return jsonify({"message": "Bedtime story generated successfully.", "audio_with_image": combined_audio_image_base64, "story_text": story_text})
 
 if __name__ == '__main__':
     app.run(debug=True)

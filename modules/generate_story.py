@@ -28,7 +28,6 @@ class StoryGenerator:
                     story_text = first_choice.message.content.strip()
                     if title:
                         story_text = f"{title}\n\n{story_text}"
-                    print(story_text)
                     StoryGenerator.logger.info('Bed time story generated successfully!')
                     return story_text
             

@@ -3,7 +3,6 @@ import io
 import requests
 import logging
 import json
-from pathlib import Path
 from openai import OpenAI
 
 class AudioGenerator:
