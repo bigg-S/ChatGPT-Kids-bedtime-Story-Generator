@@ -102,6 +102,134 @@ function base64ToUint8Array(base64String) {
     return bytes;
 }
 
+function viewStory(index, stories) {
+    // Get the story data based on the index
+    var story = stories[index];
+    
+    // Prepare data to send to the view_story route
+    var requestData = {
+        image_url: story.title.image_url,
+        story_text: story.title.story_text
+    };
+    
+    // Call the view_story route
+    fetch('/view_story', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestData)
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
+    .then(data => {
+        // Decode the base64 encoded video
+        var videoBytes = base64ToUint8Array(data.audio_with_image);
+
+        const videoBlob = new Blob([videoBytes], { type: 'video/mp4' });
+        
+        // Create a URL for the video blob
+        var videoURL = URL.createObjectURL(videoBlob);
+        
+        // Create a video element
+        var videoElement = document.createElement('video');
+        videoElement.src = videoURL;
+        videoElement.controls = true;
+        
+        // Append the video element to the story display section
+        videoElement.classList.add('w-full', 'h-400'); // Add Tailwind CSS class for full width
+        
+        // Append the video element to the story display
+        document.getElementById('storyDisplay').appendChild(videoElement);
+    })
+    .catch(error => {
+        console.error('There was a problem with the fetch operation:', error);
+    });
+}
+
+function deleteStory(index) {
+    fetch('/delete_story/' + index, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
+    .then(data => {
+        //reload the page to update the stories array after deletion
+        location.reload();
+    })
+    .catch(error => {
+        console.error('There was a problem with the delete operation:', error);
+    });
+}
+
+// function to search a story
+function searchStory() {
+    var searchTerm = document.getElementById('searchStory').value.trim().toLowerCase();
+    var searchResultsList = document.getElementById('searchResultsList');
+    
+    // Clear previous search results
+    searchResultsList.innerHTML = '';
+    
+    // If search term is empty, display all stories
+    if (!searchTerm) {
+        renderStories(stories);
+        return;
+    }
+    
+    // Filter stories based on search term
+    var filteredStories = stories.filter(story => story.title.toLowerCase().includes(searchTerm));
+    
+    // Display search results
+    if (filteredStories.length > 0) {
+        var ul = document.createElement('ul');
+        filteredStories.forEach((story, index) => {
+            var li = document.createElement('li');
+            li.classList.add('mb-4');
+            
+            var p = document.createElement('p');
+            p.textContent = story.title;
+            
+            var viewButton = document.createElement('button');
+            viewButton.textContent = 'View';
+            viewButton.classList.add('bg-green-500', 'text-white', 'py-2', 'px-4', 'rounded-lg', 'hover:bg-green-600', 'focus:outline-none', 'focus:bg-green-600');
+            viewButton.onclick = function() {
+                viewStory(index);
+            };
+            
+            var deleteButton = document.createElement('button');
+            deleteButton.textContent = 'Delete';
+            deleteButton.classList.add('bg-red-500', 'text-white', 'py-2', 'px-4', 'rounded-lg', 'hover:bg-red-600', 'focus:outline-none', 'focus:bg-red-600');
+            deleteButton.onclick = function() {
+                deleteStory(index);
+            };
+            
+            li.appendChild(p);
+            li.appendChild(viewButton);
+            li.appendChild(deleteButton);
+            
+            ul.appendChild(li);
+        });
+        searchResultsList.appendChild(ul);
+    } else {
+        var p = document.createElement('p');
+        p.classList.add('text-gray-500');
+        p.textContent = 'No matching stories found';
+        searchResultsList.appendChild(p);
+    }
+}
+
+
 function toggleView() {
     const storyDisplay = document.getElementById('storyDisplay');
     const audioWithImage = document.getElementById('audioWithImage');
