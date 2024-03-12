@@ -31,7 +31,12 @@ class ImageGenerator:
             image = np.array(image)
             
             ImageGenerator.logger.info('Image generated successfully!')
-            return image
+            
+            # Return a dictionary containing the image and its URL
+            return {
+                'image': image,
+                'image_url': image_url
+            }
         
         except requests.exceptions.RequestException as e:
             ImageGenerator.logger.error(f"Error making API request: {e}")
@@ -42,3 +47,4 @@ class ImageGenerator:
         except Exception as e:
             ImageGenerator.logger.error(f"Unexpected error: {e}")
             raise
+
