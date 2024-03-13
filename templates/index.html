@@ -11,6 +11,7 @@
             color: red
         }
     </style>
+    <script src="../static/node_modules/lz-string/libs/lz-string.js"></script>
 </head>
 <body class="bg-gray-100 flex flex-col min-h-screen">
     <!-- Header -->
@@ -59,37 +60,49 @@
                     <button id="generateButton" onclick="generateStory()" class="bg-blue-500 text-white py-2 px-4 rounded-r-lg md:ml-2 mt-2 md:mt-0 hover:bg-blue-600 focus:outline-none focus:bg-blue-600">Generate</button>
                 </div>
             </div>
-            <div id="storyDisplay" class="mt-4 p-4 bg-white rounded-lg border border-gray-300">
+            <div id="storyTextDisplay" class="mt-4 p-4 bg-white rounded-lg border border-gray-300">
                 <!-- Display loading symbol and text -->
-                <p id="loadingMessage" class="text-gray-500">No story to display</p>
+                <p id="storyLoadingMessage" class="text-gray-500">No story to display</p>
+            </div>
+            <div id="videoDisplay" class="mt-4 p-4 bg-white rounded-lg border border-gray-300 max-h-200">
+                <!-- Display loading symbol and text -->
+                <p id="videoLoadingMessage" class="text-gray-500">No video loaded</p>
             </div>
         </section>
 
         <!-- Right Section -->
         <aside class="md:w-1/4 p-4">
-            <label for="searchStory" class="block font-bold">Search Story</label>
-            <div class="flex">
-                <input type="text" id="searchStory" placeholder="Search Story" class="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-l-lg focus:outline-none focus:border-blue-500">
-                <button onclick="searchStory()" class="bg-blue-500 text-white py-2 px-4 rounded-r-lg md:ml-2 mt-2 md:mt-0 hover:bg-blue-600 focus:outline-none focus:bg-blue-600">Search</button>
+            <label for="searchStory" class="block font-bold text-lg mb-4">Search Story</label>
+            <div class="flex items-center mb-4">
+                <input type="text" id="searchStory" placeholder="Search Story" class="flex-1 px-4 py-2 border border-gray-300 rounded-l-lg focus:outline-none focus:border-blue-500">
+                <button onclick="searchStory()" class="bg-blue-500 text-white py-2 px-4 rounded-r-lg ml-2 hover:bg-blue-600 focus:outline-none focus:bg-blue-600">Search</button>
             </div>
-            <div id="searchResults" class="mt-4 p-4 bg-white rounded-lg border border-gray-300">
-                <!-- Display search results here -->
-                {% if stories %}
-                    <ul id="searchResultsList">
-                        {% for index, story in stories %}
-                            <li class="mb-4">
-                                <p class="text-black">{{ story.title }}</p>
-                                <button onclick="viewStory({{ index }}, {{ stories | tojson }})" class="bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 focus:outline-none focus:bg-green-600">View</button>
-                                <button onclick="deleteStory({{ index }})" class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-600 focus:outline-none focus:bg-red-600">Delete</button>
-                            </li>
-                        {% endfor %}
-                    </ul>
+            <div id="searchResults" class="p-4 bg-white rounded-lg border border-gray-300">
+                {% if stories is not none and stories %}
+                    <div class="overflow-y-auto max-h-96">
+                        <ul id="searchResultsList">
+                            {% for index, story in stories %}
+                                <li class="mb-4">
+                                    <div class="flex items-center justify-between">
+                                        <p class="text-md font-bold text-gray-800">{{ story.title }}</p>
+                                        <div class="flex items-center">
+                                            <button onclick="viewStory({{ story }})" class="bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 focus:outline-none focus:bg-green-600 mr-2">View</button>
+                                            <button onclick="deleteStory({{ index }})" class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-600 focus:outline-none focus:bg-red-600">Delete</button>
+                                        </div>
+                                    </div>
+                                    {% if not loop.last %}
+                                        <hr class="my-2 border-gray-300 mt-4">
+                                    {% endif %}
+                                </li>
+                            {% endfor %}
+
+                        </ul>
+                    </div>
                 {% else %}
                     <p class="text-gray-500">You have no stories yet. Sign in to view and save your stories</p>
                 {% endif %}
             </div>
-        </aside>
-
+        </aside> 
 
     </main>
 
@@ -111,7 +124,19 @@
         }
 
         // Call the function when the page is loaded
-        window.onload = clearTitleInput;
+        window.onload = function() {
+                clearTitleInput();
+                const storedStory = LZString.decompressFromBase64(localStorage.getItem('currentStory'));
+ 
+                if(storedStory) {
+                    const [ title, storyText, videoBytes ] = storedStory.split('\n');
+                    
+                    displayStoryText(title, storyText);
+            
+                    displayVideo(videoBytes);
+                }
+            }
+        
     </script>
     <script src="../static/js/script.js"></script>
 </body>

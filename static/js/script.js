@@ -1,6 +1,11 @@
+
+let isGeneratingStory = false;
+let isGeneratingVideo = false;
+let isDeletingStory = false;
+
 // Function to toggle loading state
-function toggleLoadingState() {
-    const loadingMessage = document.getElementById('loadingMessage');
+function toggleStoryLoadingState() {
+    const loadingMessage = document.getElementById('storyLoadingMessage');
     loadingMessage.innerHTML = `        
         <div role="status" class="flex items-center">
             <!-- Loading symbol -->
@@ -10,7 +15,24 @@ function toggleLoadingState() {
             </svg>
 
             <!-- Loading text -->
-            <span class="mr-2">Generating...</span>
+            <span class="mr-2"> Generating Text...</span>
+        </div>
+
+    `;
+}
+
+function toggleVideoLoadingState() {
+    const loadingMessage = document.getElementById('videoLoadingMessage');
+    loadingMessage.innerHTML = `        
+        <div role="status" class="flex items-center">
+            <!-- Loading symbol -->
+            <svg aria-hidden="true" class="w-8 h-8 text-blue-600 animate-spin dark:text-gray-600 fill-current mr-2" viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z" fill="currentColor"/>
+                <path d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z" fill="currentFill"/>
+            </svg>
+
+            <!-- Loading text -->
+            <span class="mr-2"> Loading Video...</span>
         </div>
 
     `;
@@ -18,7 +40,23 @@ function toggleLoadingState() {
 
 // function to generate the story
 async function generateStory() {
-    toggleLoadingState();
+    if(isGeneratingStory) {
+        return;
+    }
+
+    const sChildren = document.getElementById('storyTextDisplay').children;
+    if(sChildren.length > 1) {
+        clearChildren(sChildren, 'storyLoadingMessage');
+    }
+    
+    const vChildren = document.getElementById('videoDisplay').children;
+    if(vChildren.length > 1) {
+        clearChildren(vChildren, 'videoLoadingMessage');
+    }    
+
+    isGeneratingStory = true;
+
+    toggleStoryLoadingState();
 
     // Disable the "Generate" button
     document.getElementById('generateButton').disabled = true;
@@ -50,42 +88,78 @@ async function generateStory() {
         const _title = storyParts[0];
         const restOfStory = storyParts.slice(1).join('\n\n'); // Rejoin the rest of the story
 
-        // Create story display HTML
-        const storyDisplayHTML = `
-            <p><strong>${_title}</strong></p>
-            <p>${restOfStory}</p>
-            <hr class="my-4 border-gray-300">
-            <h2 class="text-lg font-bold">Listen!</h2>
-        `;
+        displayStoryText(_title, restOfStory) 
 
-        // Display story text and heading
-        document.getElementById('storyDisplay').innerHTML = storyDisplayHTML;
+        displayVideo(videoBase64)
+
+        localStorage.setItem('currentStory', (JSON.stringify(data.story_data)));
+
+        location.reload();
         
-        // Convert Base64 string to typed byte array
-        const videoBytes = base64ToUint8Array(videoBase64);
-
-        // create a blob from the decoded video bytes
-        const videoBlob = new Blob([videoBytes], { type: 'video/mp4' });
-
-        // create the video object url
-        const videoUrl = URL.createObjectURL(videoBlob);
-
-        // create the video element
-        const videoElement = document.createElement('video');
-        videoElement.controls = true;
-        videoElement.src = videoUrl;
-        videoElement.classList.add('w-full', 'h-400'); // Add Tailwind CSS class for full width
-        
-        // Append the video element to the story display
-        document.getElementById('storyDisplay').appendChild(videoElement);
     } catch (error) {
         console.error('Error:', error);
         // Display error message if request fails
-        document.getElementById('storyDisplay').innerHTML = '<p class="error-message">Error fetching story. Please try again later.</p>';
+        document.getElementById('storyTextDisplay').innerHTML = '<p class="error-message">Error fetching story. Please try again later.</p>';
+        document.getElementById('videoDisplay').innerHTML = '<p class="error-message">Error fetching story. Please try again later.</p>';
     } finally {
+        isGeneratingStory = false;
         // Enable the "Generate" button
         document.getElementById('generateButton').disabled = false;
     }
+}
+
+function clearChildren(children, id) {
+    // Loop through each child element
+    for (let i = 0; i < children.length; i++) {
+        // Check if the child element is not the videoLoadingMessage element
+        if (children[i].id !== id) {
+            // Set the innerHTML of the child element to an empty string
+            children[i].innerHTML = '';
+        }
+    }
+}
+
+// display text
+function displayStoryText(_title, restOfStory) {
+    // Create story display HTML
+    const storyDisplayHTML = `
+    <p><strong>${_title}</strong></p>
+    <p>${restOfStory}</p>
+    <hr class="my-4 border-gray-300">
+    `;
+
+    document.getElementById('storyLoadingMessage').textContent = '';
+
+    // Append the story HTML to the existing content
+    document.getElementById('storyTextDisplay').innerHTML += storyDisplayHTML;
+}
+
+//display video
+function displayVideo(videoBase64) {
+    // Convert Base64 string to typed byte array
+    const videoBytes = base64ToUint8Array(videoBase64);
+
+    // create a blob from the decoded video bytes
+    const videoBlob = new Blob([videoBytes], { type: 'video/mp4' });
+
+    // create the video object url
+    const videoUrl = URL.createObjectURL(videoBlob);
+
+    // create the video element
+    const videoElement = document.createElement('video');
+    videoElement.controls = true;
+    videoElement.src = videoUrl;
+    videoElement.classList.add('w-full', 'max-h-400'); // Add Tailwind CSS class for full width
+    
+    // Create and append the heading element
+    const heading = document.createElement('h2');
+    heading.textContent = 'Listen!';
+    document.getElementById('videoDisplay').appendChild(heading);
+
+    document.getElementById('videoLoadingMessage').textContent = '';
+
+    // Append the video element to the video display
+    document.getElementById('videoDisplay').appendChild(videoElement);    
 }
 
 
@@ -102,15 +176,23 @@ function base64ToUint8Array(base64String) {
     return bytes;
 }
 
-function viewStory(index, stories) {
-    // Get the story data based on the index
-    var story = stories[index];
+// function to generate a video of an existing story
+function viewStory(story) {
+
+    if(isGeneratingVideo) {
+        return;
+    }
     
+    isGeneratingVideo = true;
     // Prepare data to send to the view_story route
     var requestData = {
-        image_url: story.title.image_url,
-        story_text: story.title.story_text
+        title: story.title,
+        story_text: story.story_text
     };
+
+    displayStoryText(story.title, story.story_text);
+
+    toggleVideoLoadingState();
     
     // Call the view_story route
     fetch('/view_story', {
@@ -122,36 +204,30 @@ function viewStory(index, stories) {
     })
     .then(response => {
         if (!response.ok) {
+            isGeneratingVideo = false;
             throw new Error('Network response was not ok');
         }
         return response.json();
     })
     .then(data => {
         // Decode the base64 encoded video
-        var videoBytes = base64ToUint8Array(data.audio_with_image);
-
-        const videoBlob = new Blob([videoBytes], { type: 'video/mp4' });
-        
-        // Create a URL for the video blob
-        var videoURL = URL.createObjectURL(videoBlob);
-        
-        // Create a video element
-        var videoElement = document.createElement('video');
-        videoElement.src = videoURL;
-        videoElement.controls = true;
-        
-        // Append the video element to the story display section
-        videoElement.classList.add('w-full', 'h-400'); // Add Tailwind CSS class for full width
-        
-        // Append the video element to the story display
-        document.getElementById('storyDisplay').appendChild(videoElement);
+        displayVideo(data.audio_with_image);
+        localStorage.setItem('currentStory', (JSON.stringify(data.story_data)));
+        isGeneratingVideo = false;
     })
     .catch(error => {
         console.error('There was a problem with the fetch operation:', error);
+        isGeneratingVideo = false;
     });
 }
 
 function deleteStory(index) {
+    if(isDeletingStory) {
+        return;
+    }
+
+    isDeletingStory = true;
+
     fetch('/delete_story/' + index, {
         method: 'DELETE',
         headers: {
@@ -160,16 +236,19 @@ function deleteStory(index) {
     })
     .then(response => {
         if (!response.ok) {
+            isDeletingStory = false;
             throw new Error('Network response was not ok');
         }
         return response.json();
     })
     .then(data => {
         //reload the page to update the stories array after deletion
+        isDeletingStory = false;
         location.reload();
     })
     .catch(error => {
         console.error('There was a problem with the delete operation:', error);
+        isDeletingStory = false;
     });
 }
 
