@@ -2,9 +2,8 @@ import os
 import json
 import base64
 import requests
-from io import BytesIO
-from PIL import Image
-import numpy as np
+from datetime import timedelta
+import lzstring
 from flask import Flask, jsonify, request, render_template, redirect, session, url_for, abort
 from flask_login import (
     LoginManager,
@@ -37,6 +36,11 @@ database_initializer = DatabaseInitializer()
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
+@app.before_request
+def make_session_permanent():
+    session.permanent = True
+    app.permanent_session_lifetime = timedelta(days=7)
+
 # User session management setup
 login_manager = LoginManager()
 login_manager.init_app(app=app)
@@ -51,9 +55,14 @@ def load_user(user_id):
 
 @app.route('/')
 def index():
+    _stories = None
+    _stories_with_index = None
     if current_user.is_authenticated:
-        stories = get_stories()
-    return render_template('index.html', stories=stories)
+        _stories = get_stories()
+        # Attach index attribute to each story
+        _stories_with_index = enumerate(_stories)  
+    return render_template('index.html', stories=_stories_with_index)
+
 
 def get_google_provider_cfg():
     return requests.get(GOOGLE_DISCOVERY_URL).json()
@@ -70,6 +79,7 @@ def login():
         redirect_uri=request.base_url + "/callback",
         scope=["openid", "email", "profile"],
     )
+
     return redirect(request_uri)
 
 # login callback
@@ -84,7 +94,7 @@ def callback():
     token_endpoint = google_provider_cfg["token_endpoint"]
     
     # Prepare and send a request to get tokens
-    token_url, headers, body = client.prepare_request_uri(
+    token_url, headers, body = client.prepare_token_request(
         token_endpoint,
         authorization_response = request.url,
         redirect_url=request.base_url,
@@ -140,6 +150,7 @@ def callback():
 @login_required
 def logout():
     logout_user()
+    session.clear()
     return redirect(url_for("index"))
     
 
@@ -160,44 +171,44 @@ def generate_bedtime_story():
     audio_content = AudioGenerator.generate_audio(text=story_text, api_key=api_key)
 
     # Combine audio with image
-    combined_audio_image = AudioImageCombiner.combine(audio_content=audio_content, image_data=image["image"])
+    combined_audio_image = AudioImageCombiner.combine(audio_content=audio_content, image_data=image)
     
-    # save story to database iif a user is signed in
+    # Save story to database if a user is signed in
     if current_user.is_authenticated:
         # Construct the story object
         story_object = {
-            title: {
-                "image_url": image['image_url'],
-                "story_text": story_text
-            }
+            "title": title,
+            "story_text": story_text
         }
-        
+        print(story_object)
         # Retrieve the current user's record
         user = User.get(current_user.id)
         
         # Append the new story object to the user's stories array
         user.stories.append(story_object)
         
-        user.save()       
+        # Save the user with the updated stories array
+        user.save()
+       
     
     # Encode the combined_audio_image using base64 encoding
     combined_audio_image_base64 = base64.b64encode(combined_audio_image).decode('utf-8')
+    
+    lz = lzstring.LZString()
+    story_data = lz.compressToBase64(title + '\n' + story_text + '\n' + combined_audio_image_base64)
 
     # Return combined audio with image
-    return jsonify({"message": "Bedtime story generated successfully.", "audio_with_image": combined_audio_image_base64, "story_text": story_text})
+    return jsonify({"story_data": story_data, "audio_with_image": combined_audio_image_base64, "story_text": story_text})
 
 # generate video from stored image and story text
-@app.route('/view_story')
+@app.route('/view_story', methods=['POST'])
 def view_story():
     data = request.get_json()
-    image_url = data.get('image_url')
+    title = data.get('title')
     story_text = data.get('story_text')
     api_key = os.getenv('OPENAI_API_KEY')
     
-    image_response = requests.get(image_url)
-    image_response.raise_for_status()  # Raise an exception if image retrieval fails
-    image = Image.open(BytesIO(image_response.content))
-    image = np.array(image)
+    image = ImageGenerator.generate_image(api_key=api_key, title=title)
 
     # Generate audio
     audio_content = AudioGenerator.generate_audio(text=story_text, api_key=api_key)
@@ -207,15 +218,18 @@ def view_story():
     
     # Encode the combined_audio_image using base64 encoding
     combined_audio_image_base64 = base64.b64encode(combined_audio_image).decode('utf-8')
+    
+    lz = lzstring.LZString()
+    story_data = lz.compressToBase64(title + '\n' + story_text + '\n' + combined_audio_image_base64)
 
     # Return combined audio with image
-    return jsonify({"message": "Bedtime story generated successfully.", "audio_with_image": combined_audio_image_base64 })
+    return jsonify({"story_data": story_data, "audio_with_image": combined_audio_image_base64 })
 
 
 # route to delete a story
-@app.route('/delete_story/<int:story_id>', methods=['DELETE'])
+@app.route('/delete_story/<int:index>', methods=['DELETE'])
 @login_required
-def delete_story(story_id):
+def delete_story(index):
     # Retrieve the current user's record
     user = User.get(current_user.id)
     
@@ -224,27 +238,33 @@ def delete_story(story_id):
         abort(404, description="User not found")
     
     # Check if the story exists
-    if story_id >= len(user.stories) or story_id < 0:
+    if index >= len(user.stories) or index < 0:
         abort(404, description="Story not found")
     
     # Delete the story from the user's stories array
-    del user.stories[story_id]
+    del user.stories[index]
+    
+    # If all stories are deleted, set stories field to an empty array
+    if not user.stories:
+        user.stories = []
     
     # Update the user's record in the database
     user.save()
     
     return jsonify({"message": "Story deleted successfully"}), 200
 
+
 # route to get stories
 def get_stories():
     # Retrieve the current user's record
-    user = User.get(current_user.id)
+    if current_user.id:
+        user = User.get(current_user.id)
     
     # Check if the user exists
     if not user:
-        abort(404, description="User not found")
+        return abort(404, description="User not found")
     
-    return jsonify({"stories": user.stories}), 200
+    return user.stories
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(ssl_context="adhoc", debug=True)

@@ -33,10 +33,7 @@ class ImageGenerator:
             ImageGenerator.logger.info('Image generated successfully!')
             
             # Return a dictionary containing the image and its URL
-            return {
-                'image': image,
-                'image_url': image_url
-            }
+            return image
         
         except requests.exceptions.RequestException as e:
             ImageGenerator.logger.error(f"Error making API request: {e}")
