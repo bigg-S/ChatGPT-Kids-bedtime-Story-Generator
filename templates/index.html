@@ -56,15 +56,15 @@
             <div class="mb-4">
                 <label for="storyTitle" class="block font-bold">Enter Story Title</label>
                 <div class="flex">
-                    <input type="text" id="storyTitle" placeholder="Enter story title" class="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-l-lg focus:outline-none focus:border-blue-500">
-                    <button id="generateButton" onclick="generateStory()" class="bg-blue-500 text-white py-2 px-4 rounded-r-lg md:ml-2 mt-2 md:mt-0 hover:bg-blue-600 focus:outline-none focus:bg-blue-600">Generate</button>
+                    <input type="text" id="storyTitle" placeholder="Enter story title" class="w-100 md:w-32 sm:w-32 border border-gray-300 rounded-l-lg focus:outline-none focus:border-blue-500">
+                    <button id="generateButton" onclick="generateStory()" class="bg-blue-500 text-white py-2 px-4 rounded-r-lg mt-2 md:mt-0 hover:bg-blue-600 focus:outline-none focus:bg-blue-600">Generate</button>
                 </div>
             </div>
             <div id="storyTextDisplay" class="mt-4 p-4 bg-white rounded-lg border border-gray-300">
                 <!-- Display loading symbol and text -->
                 <p id="storyLoadingMessage" class="text-gray-500">No story to display</p>
             </div>
-            <div id="videoDisplay" class="mt-4 p-4 bg-white rounded-lg border border-gray-300 max-h-200">
+            <div id="videoDisplay" class="mt-4 p-4 bg-white rounded-lg border border-gray-300 max-h-300">
                 <!-- Display loading symbol and text -->
                 <p id="videoLoadingMessage" class="text-gray-500">No video loaded</p>
             </div>
@@ -74,8 +74,7 @@
         <aside class="md:w-1/4 p-4">
             <label for="searchStory" class="block font-bold text-lg mb-4">Search Story</label>
             <div class="flex items-center mb-4">
-                <input type="text" id="searchStory" placeholder="Search Story" class="flex-1 px-4 py-2 border border-gray-300 rounded-l-lg focus:outline-none focus:border-blue-500">
-                <button onclick="searchStory()" class="bg-blue-500 text-white py-2 px-4 rounded-r-lg ml-2 hover:bg-blue-600 focus:outline-none focus:bg-blue-600">Search</button>
+                <input type="text" id="searchStory" placeholder="Search Story" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
             </div>
             <div id="searchResults" class="p-4 bg-white rounded-lg border border-gray-300">
                 {% if stories is not none and stories %}
@@ -113,6 +112,26 @@
 
     <!-- JavaScript for toggling mobile menu -->
     <script>
+        // Add event listener to the search input field
+        document.getElementById('searchStory').addEventListener('input', searchStory);
+
+        // function to search a story
+        function searchStory() {
+            const searchInput = document.getElementById('searchStory').value.trim().toLowerCase();
+            const stories = document.querySelectorAll('#searchResultsList li');
+
+            stories.forEach(story => {
+                const title = story.querySelector('p').textContent.trim().toLowerCase();
+                if (searchInput === '') {
+                    story.style.display = 'block'; // Show all stories if search input is empty
+                } else if (title.includes(searchInput)) {
+                    story.style.display = 'block'; // Display matching stories
+                } else {
+                    story.style.display = 'none'; // Hide non-matching stories
+                }
+            });
+        }
+
         document.getElementById('currentYear').textContent = new Date().getFullYear();
         document.getElementById('menuToggle').addEventListener('click', function() {
             document.getElementById('mobileMenu').classList.toggle('hidden');
@@ -126,15 +145,8 @@
         // Call the function when the page is loaded
         window.onload = function() {
                 clearTitleInput();
-                const storedStory = LZString.decompressFromBase64(localStorage.getItem('currentStory'));
- 
-                if(storedStory) {
-                    const [ title, storyText, videoBytes ] = storedStory.split('\n');
-                    
-                    displayStoryText(title, storyText);
-            
-                    displayVideo(videoBytes);
-                }
+                const title = JSON.parse(localStorage.getItem('currentTitle'));
+                retrieveDataFromIndexedDB(title);
             }
         
     </script>

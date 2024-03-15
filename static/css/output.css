@@ -544,10 +544,6 @@ video {
   --tw-backdrop-sepia:  ;
 }
 
-.static {
-  position: static;
-}
-
 .absolute {
   position: absolute;
 }
@@ -571,10 +567,6 @@ video {
 
 .mb-4 {
   margin-bottom: 1rem;
-}
-
-.ml-2 {
-  margin-left: 0.5rem;
 }
 
 .mr-2 {
@@ -817,11 +809,13 @@ video {
   outline-offset: 2px;
 }
 
-@media (min-width: 768px) {
-  .md\:ml-2 {
-    margin-left: 0.5rem;
+@media (min-width: 640px) {
+  .sm\:w-32 {
+    width: 8rem;
   }
+}
 
+@media (min-width: 768px) {
   .md\:mr-2 {
     margin-right: 0.5rem;
   }
@@ -844,6 +838,10 @@ video {
 
   .md\:w-3\/4 {
     width: 75%;
+  }
+
+  .md\:w-32 {
+    width: 8rem;
   }
 
   .md\:w-auto {

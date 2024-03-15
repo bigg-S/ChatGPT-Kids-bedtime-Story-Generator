@@ -11,6 +11,9 @@ class User(UserMixin):
         self.name = name
         self.email = email
         self.stories = stories
+    
+    def __repr__(self):
+        return f"User(id={self.id}, name='{self.name}', email='{self.email}', stories={self.stories})"
 
     @staticmethod
     def get(user_id):
