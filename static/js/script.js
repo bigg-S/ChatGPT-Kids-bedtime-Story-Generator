@@ -1,9 +1,8 @@
 
-let isGeneratingStory = false;
-let isGeneratingVideo = false;
-let isDeletingStory = false;
+let isRequestInProgress = false;
+let isScrollToTopButtonCreated = false;
 
-// Function to toggle loading state
+// Function to toggle loading state for story
 function toggleStoryLoadingState() {
     const loadingMessage = document.getElementById('storyLoadingMessage');
     loadingMessage.innerHTML = `        
@@ -17,10 +16,10 @@ function toggleStoryLoadingState() {
             <!-- Loading text -->
             <span class="mr-2"> Generating Text...</span>
         </div>
-
     `;
 }
 
+// Function to toggle loading state for video
 function toggleVideoLoadingState() {
     const loadingMessage = document.getElementById('videoLoadingMessage');
     loadingMessage.innerHTML = `        
@@ -34,29 +33,100 @@ function toggleVideoLoadingState() {
             <!-- Loading text -->
             <span class="mr-2"> Loading Video...</span>
         </div>
-
     `;
+}
+
+// Function to perform request with polling for async tasks
+async function performRequestWithPolling(url, requestData, loadingStateFunction) {
+    if (isRequestInProgress) return;
+
+    isRequestInProgress = true;
+
+    try {
+        loadingStateFunction();
+        if(url === '/generate_bedtime_story') {
+            toggleVideoLoadingState();
+        }
+
+        let response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestData)
+        });
+
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+
+        let responseData = await response.json();
+
+        // Check if the response indicates that the task is asynchronous
+        if (responseData.asyncTask) {
+            // Poll for the result of the async task
+            let result = await pollForResult(responseData.asyncTaskId, url, loadingStateFunction);
+            return result;
+        }
+
+        return responseData; // Return the response if not an async task
+    } catch (error) {
+        console.error('Error:', error);
+        throw error;
+    } finally {
+        isRequestInProgress = false;
+    }
+}
+
+// Function to poll for the result of an async task
+async function pollForResult(taskId, url, loadingStateFunction) {
+    const POLL_INTERVAL = 1000; // Polling interval in milliseconds
+    let result = null;
+
+    while (true) {
+        try {
+            let response = await fetch(url + '/' + taskId); // Assuming taskId is used to check task status
+            let responseData = await response.json();
+
+            if (response.ok) {
+                // Check if the task is completed
+                if (responseData.taskCompleted) {
+                    result = responseData.result;
+                    break; // Exit the loop if task is completed
+                }
+            } else {
+                throw new Error('Network response was not ok');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            // Handle error if necessary
+        }
+
+        // Wait for the next polling interval
+        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
+    }
+
+    // Task completed, return the result
+    return result;
 }
 
 // function to generate the story
 async function generateStory() {
-    if(isGeneratingStory) {
-        return;
-    }
 
     const sChildren = document.getElementById('storyTextDisplay').children;
-    if(sChildren.length > 1) {
+    if(sChildren) {
         clearChildren(sChildren, 'storyLoadingMessage');
     }
-    
+
     const vChildren = document.getElementById('videoDisplay').children;
-    if(vChildren.length > 1) {
+    if(vChildren) {
         clearChildren(vChildren, 'videoLoadingMessage');
-    }    
+    }
 
-    isGeneratingStory = true;
-
-    toggleStoryLoadingState();
+    const videoElement = document.querySelector('video');
+    if (videoElement) {
+        videoElement.remove();
+    }
 
     // Disable the "Generate" button
     document.getElementById('generateButton').disabled = true;
@@ -64,19 +134,8 @@ async function generateStory() {
     const title = document.getElementById('storyTitle').value;
 
     try {
-        const response = await fetch('/generate_bedtime_story', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ title: title })
-        });
 
-        if (!response.ok) {
-            throw new Error('Network response was not ok');
-        }
-
-        const data = await response.json();
+        const data = await performRequestWithPolling('/generate_bedtime_story', { title: title }, toggleStoryLoadingState);
 
         const storyText = data.story_text;
         const videoBase64 = data.audio_with_image;
@@ -88,11 +147,11 @@ async function generateStory() {
         const _title = storyParts[0];
         const restOfStory = storyParts.slice(1).join('\n\n'); // Rejoin the rest of the story
 
+        storeDataInIndexedDB(_title, restOfStory, videoBase64);
+
         displayStoryText(_title, restOfStory) 
 
         displayVideo(videoBase64)
-
-        localStorage.setItem('currentStory', (JSON.stringify(data.story_data)));
 
         location.reload();
         
@@ -102,12 +161,128 @@ async function generateStory() {
         document.getElementById('storyTextDisplay').innerHTML = '<p class="error-message">Error fetching story. Please try again later.</p>';
         document.getElementById('videoDisplay').innerHTML = '<p class="error-message">Error fetching story. Please try again later.</p>';
     } finally {
-        isGeneratingStory = false;
         // Enable the "Generate" button
         document.getElementById('generateButton').disabled = false;
     }
 }
 
+// to store the story in the indexDB of the browser
+function openDatabase() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open('storyDatabase', 1);
+
+        request.onerror = function(event) {
+            console.error('Failed to open database:', event.target.error);
+            reject(event.target.error);
+        };
+
+        request.onsuccess = function(event) {
+            resolve(event.target.result);
+        };
+
+        request.onupgradeneeded = function(event) {
+            const db = event.target.result;
+            const store = db.createObjectStore('stories', { keyPath: 'title' });
+            store.createIndex('title', 'title', { unique: true });
+        };
+    });
+}
+
+async function storeDataInIndexedDB(title, storyText, videoBase64) {
+
+    localStorage.setItem('currentTitle', (JSON.stringify(title)));
+
+    // clear the ind db before storing data in it
+    clearObjectStore();
+
+    // Open IndexedDB database
+    const db = await openDatabase();
+
+    // Start a transaction
+    const tx = db.transaction(['stories'], 'readwrite');
+
+    // Access the object store
+    const store = tx.objectStore('stories');
+
+    // Create a data object
+    const data = { title, storyText, videoBase64 };
+
+    // Add or update the data in the object store
+    const request = store.put(data);
+
+    // Handle success and error callbacks
+    request.onsuccess = function(event) {
+        console.log('Data stored successfully');
+    };
+
+    request.onerror = function(event) {
+        console.error('Error storing data:', event.target.error);
+    };
+
+}
+
+// retrieve data from indb
+async function retrieveDataFromIndexedDB(title) {
+    // Open IndexedDB database
+    const db = await openDatabase();
+
+    // Start a transaction
+    const tx = db.transaction(['stories'], 'readonly');
+
+    // Access the object store
+    const store = tx.objectStore('stories');
+
+    // Get the data by primary key (title)
+    const request = store.get(title);
+
+    // Handle success and error callbacks
+    request.onsuccess = function(event) {
+        // Retrieve the data from the result
+        const data = event.target.result;
+
+        if (data) {
+            // Extract title, story text, and video Base64 bytes
+            const title = data.title;
+            const storyText = data.storyText;
+            const videoBase64 = data.videoBase64;
+
+            displayStoryText(title, storyText);
+
+            displayVideo(videoBase64);
+        } else {
+            console.log('No data found for the specified title.');
+        }
+    };
+
+    request.onerror = function(event) {
+        console.error('Error retrieving data:', event.target.error);
+    };
+
+    // Complete the transaction
+    await tx.complete;
+}
+
+async function clearObjectStore() {
+    const db = await openDatabase();
+    
+    // Start a transaction with readwrite mode
+    const tx = db.transaction(['stories'], 'readwrite');
+    
+    // Access the object store
+    const store = tx.objectStore('stories');
+    
+    // Clear the object store
+    store.clear();
+
+    // Complete the transaction
+    await tx.complete;
+    
+    console.log('Object store "stories" cleared successfully.');
+}
+
+
+
+// clear the content of child elements of a particular element
 function clearChildren(children, id) {
     // Loop through each child element
     for (let i = 0; i < children.length; i++) {
@@ -136,6 +311,10 @@ function displayStoryText(_title, restOfStory) {
 
 //display video
 function displayVideo(videoBase64) {
+    const vChildren = document.getElementById('videoDisplay').children;
+    if(vChildren) {
+        clearChildren(vChildren, 'videoLoadingMessage');
+    }
     // Convert Base64 string to typed byte array
     const videoBytes = base64ToUint8Array(videoBase64);
 
@@ -147,20 +326,30 @@ function displayVideo(videoBase64) {
 
     // create the video element
     const videoElement = document.createElement('video');
-    videoElement.controls = true;
     videoElement.src = videoUrl;
-    videoElement.classList.add('w-full', 'max-h-400'); // Add Tailwind CSS class for full width
-    
-    // Create and append the heading element
-    const heading = document.createElement('h2');
-    heading.textContent = 'Listen!';
-    document.getElementById('videoDisplay').appendChild(heading);
 
-    document.getElementById('videoLoadingMessage').textContent = '';
+    // event listener to ensure styles are applied after video is loaded
+    videoElement.addEventListener('loadedmetadata', function() {
+        videoElement.controls = true;
+        videoElement.classList.add('w-full', 'max-h-400'); 
+
+        // Create and append the heading element
+        const heading = document.createElement('h2');
+        heading.textContent = 'Listen!';
+        document.getElementById('videoDisplay').appendChild(heading);
+
+        document.getElementById('videoLoadingMessage').textContent = '';
+
+        videoElement.style.height = '500px';
+
+        // Append the video element to the video display
+        document.getElementById('videoDisplay').appendChild(videoElement);
+    });
 
     // Append the video element to the video display
-    document.getElementById('videoDisplay').appendChild(videoElement);    
+    document.getElementById('videoDisplay')
 }
+
 
 
 // Function to convert Base64 string to typed byte array
@@ -177,56 +366,58 @@ function base64ToUint8Array(base64String) {
 }
 
 // function to generate a video of an existing story
-function viewStory(story) {
+async function viewStory(story) {
+    try {
+        // Prepare data to send to the view_story route
+        var requestData = {
+            title: story.title,
+            story_text: story.story_text
+        };
 
-    if(isGeneratingVideo) {
-        return;
-    }
-    
-    isGeneratingVideo = true;
-    // Prepare data to send to the view_story route
-    var requestData = {
-        title: story.title,
-        story_text: story.story_text
-    };
-
-    displayStoryText(story.title, story.story_text);
-
-    toggleVideoLoadingState();
-    
-    // Call the view_story route
-    fetch('/view_story', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestData)
-    })
-    .then(response => {
-        if (!response.ok) {
-            isGeneratingVideo = false;
-            throw new Error('Network response was not ok');
+        const sChildren = document.getElementById('storyTextDisplay').children;
+        if(sChildren) {
+            clearChildren(sChildren, 'storyLoadingMessage');
         }
-        return response.json();
-    })
-    .then(data => {
-        // Decode the base64 encoded video
-        displayVideo(data.audio_with_image);
-        localStorage.setItem('currentStory', (JSON.stringify(data.story_data)));
-        isGeneratingVideo = false;
-    })
-    .catch(error => {
-        console.error('There was a problem with the fetch operation:', error);
-        isGeneratingVideo = false;
-    });
+
+        const videoElement = document.querySelector('video');
+        if (videoElement) {
+            videoElement.remove();
+        }
+
+        displayStoryText(story.title, story.story_text);
+
+        toggleVideoLoadingState();
+        
+        // Call the view_story route
+        const data = await performRequestWithPolling('/view_story', requestData, toggleVideoLoadingState);
+        if(data) {
+            displayVideo(data.audio_with_image);
+
+            storeDataInIndexedDB(story.title, story.story_text, data.audio_with_image);
+
+            location.reload();
+        }
+        
+    } catch(error) {
+        document.getElementById('videoDisplay').appendChild('<p class="error-message">Error loading video.</p>');
+        console.log(error)
+    }
 }
 
+// delete a story
 function deleteStory(index) {
-    if(isDeletingStory) {
+    if(isRequestInProgress) {
         return;
     }
 
-    isDeletingStory = true;
+    // confirmation before proceeding with deletion
+    const confirmed = window.confirm('Are you sure you want to delete this story?');
+    if (!confirmed) {
+        isRequestInProgress = false;
+        return; 
+    }
+
+    isRequestInProgress = true;
 
     fetch('/delete_story/' + index, {
         method: 'DELETE',
@@ -236,88 +427,111 @@ function deleteStory(index) {
     })
     .then(response => {
         if (!response.ok) {
-            isDeletingStory = false;
+            isRequestInProgress = false;
             throw new Error('Network response was not ok');
         }
         return response.json();
     })
     .then(data => {
         //reload the page to update the stories array after deletion
-        isDeletingStory = false;
+        isRequestInProgress = false;
         location.reload();
     })
     .catch(error => {
         console.error('There was a problem with the delete operation:', error);
-        isDeletingStory = false;
+        isRequestInProgress = false;
     });
 }
 
-// function to search a story
-function searchStory() {
-    var searchTerm = document.getElementById('searchStory').value.trim().toLowerCase();
-    var searchResultsList = document.getElementById('searchResultsList');
-    
-    // Clear previous search results
-    searchResultsList.innerHTML = '';
-    
-    // If search term is empty, display all stories
-    if (!searchTerm) {
-        renderStories(stories);
-        return;
-    }
-    
-    // Filter stories based on search term
-    var filteredStories = stories.filter(story => story.title.toLowerCase().includes(searchTerm));
-    
-    // Display search results
-    if (filteredStories.length > 0) {
-        var ul = document.createElement('ul');
-        filteredStories.forEach((story, index) => {
-            var li = document.createElement('li');
-            li.classList.add('mb-4');
-            
-            var p = document.createElement('p');
-            p.textContent = story.title;
-            
-            var viewButton = document.createElement('button');
-            viewButton.textContent = 'View';
-            viewButton.classList.add('bg-green-500', 'text-white', 'py-2', 'px-4', 'rounded-lg', 'hover:bg-green-600', 'focus:outline-none', 'focus:bg-green-600');
-            viewButton.onclick = function() {
-                viewStory(index);
-            };
-            
-            var deleteButton = document.createElement('button');
-            deleteButton.textContent = 'Delete';
-            deleteButton.classList.add('bg-red-500', 'text-white', 'py-2', 'px-4', 'rounded-lg', 'hover:bg-red-600', 'focus:outline-none', 'focus:bg-red-600');
-            deleteButton.onclick = function() {
-                deleteStory(index);
-            };
-            
-            li.appendChild(p);
-            li.appendChild(viewButton);
-            li.appendChild(deleteButton);
-            
-            ul.appendChild(li);
-        });
-        searchResultsList.appendChild(ul);
-    } else {
-        var p = document.createElement('p');
-        p.classList.add('text-gray-500');
-        p.textContent = 'No matching stories found';
-        searchResultsList.appendChild(p);
+// Function to display the "Listen" button
+function displayListenButton() {
+    const videoDisplay = document.getElementById('videoDisplay');
+    const videoElement = videoDisplay.querySelector('video');
+
+    if (videoElement) {
+        // If a video element exists, create the "Listen" button
+        const listenButton = document.createElement('button');
+        listenButton.textContent = 'Listen';
+        listenButton.onclick = scrollToVideo;
+        listenButton.classList.add('bg-blue-500', 'text-white', 'py-2', 'px-4', 'rounded-lg', 'md:ml-2', 'mt-2', 'md:mt-0', 'hover:bg-blue-600', 'focus:outline-none', 'focus:bg-blue-600');
+
+        // Append the button next to the "Generate" button
+        const generateButton = document.getElementById('generateButton');
+        generateButton.parentNode.insertBefore(listenButton, generateButton.nextSibling);
     }
 }
 
+// Function to scroll to the video display section
+function scrollToVideo() {
+    const videoDisplay = document.getElementById('videoDisplay');
+    videoDisplay.scrollIntoView({ behavior: 'smooth' });
+}
 
-function toggleView() {
-    const storyDisplay = document.getElementById('storyDisplay');
-    const audioWithImage = document.getElementById('audioWithImage');
+// Create a new observer
+const observer = new MutationObserver(function(mutationsList, observer) {
+    // Check if a new node is added to the videoDisplay div
+    const videoDisplay = document.getElementById('videoDisplay');
+    const videoElement = videoDisplay.querySelector('video');
+    if (videoElement) {
+        // If a video element is added, display the "Listen" button
+        displayListenButton();
+    }
+});
 
-    if (storyDisplay.style.display === 'none') {
-        storyDisplay.style.display = 'block';
-        audioWithImage.style.display = 'none';
-    } else {
-        storyDisplay.style.display = 'none';
-        audioWithImage.style.display = 'block';
+// Observe changes to the videoDisplay div
+observer.observe(document.getElementById('videoDisplay'), { childList: true });
+
+// Function to create and append the "Scroll to Top" button
+function createScrollToTopButton() {
+    if (!isScrollToTopButtonCreated) {
+        const scrollToTopButton = document.createElement('button');
+        scrollToTopButton.textContent = 'Scroll to Top';
+        scrollToTopButton.onclick = scrollToTop;
+        scrollToTopButton.classList.add(
+            'fixed',
+            'bottom-4', 
+            'right-4',
+            'bg-blue-500',
+            'text-white',
+            'py-2',
+            'px-4',
+            'rounded-lg',
+            'hover:bg-blue-600',
+            'focus:outline-none',
+            'focus:bg-blue-600',
+            'z-10',
+            'w-auto'
+        );
+        document.body.appendChild(scrollToTopButton);
+        isScrollToTopButtonCreated = true;
     }
 }
+
+// Function to scroll to the top of the page
+function scrollToTop() {
+    if (document.body.scrollTop !== 0 || document.documentElement.scrollTop !== 0) {
+        window.scrollBy(0, -50);
+        requestAnimationFrame(scrollToTop);
+    }
+}
+
+// Function to remove the "Scroll to Top" button
+function removeScrollToTopButton() {
+    const scrollToTopButton = document.getElementById('scrollToTopButton');
+    if (scrollToTopButton) {
+        scrollToTopButton.remove();
+        isScrollToTopButtonCreated = false;
+    }
+}
+
+// Event listener for scrolling
+window.addEventListener('scroll', function() {
+    const scrollPositionFromBottom = document.body.offsetHeight - (window.innerHeight + window.scrollY);
+    if (scrollPositionFromBottom <= 30) {
+        // If the user has scrolled up to approximately 30px from the bottom, create and append the "Scroll to Top" button
+        createScrollToTopButton();
+    } else {
+        // If the user is not scrolled up to approximately 30px from the bottom, remove the "Scroll to Top" button
+        removeScrollToTopButton();
+    }
+});

@@ -2,8 +2,8 @@ import os
 import json
 import base64
 import requests
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
-import lzstring
 from flask import Flask, jsonify, request, render_template, redirect, session, url_for, abort
 from flask_login import (
     LoginManager,
@@ -34,16 +34,25 @@ GOOGLE_DISCOVERY_URL = os.getenv('GOOGLE_DISCOVERY_URL', None)
 database_initializer = DatabaseInitializer()
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
+#print(os.urandom(24))
+app.secret_key = os.getenv('APP_SECRET_KEY')
 
-@app.before_request
-def make_session_permanent():
-    session.permanent = True
-    app.permanent_session_lifetime = timedelta(days=7)
+app.config.update(
+    DEBUG=True,
+    SESSION_COOKIE_HTTPONLY=True,
+    REMEMBER_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_PERMANENT=True,
+)
 
 # User session management setup
 login_manager = LoginManager()
 login_manager.init_app(app=app)
+login_manager.session_protection = "strong"
+login_manager.needs_refresh_message = (u"Session timedout, please login again")
+login_manager.needs_refresh_message_category = "info"
+
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
 
 # OAuth 2 client setup
 client = WebApplicationClient(GOOGLE_CLIENT_ID)
@@ -60,8 +69,8 @@ def index():
     if current_user.is_authenticated:
         _stories = get_stories()
         # Attach index attribute to each story
-        _stories_with_index = enumerate(_stories)  
-    return render_template('index.html', stories=_stories_with_index)
+        _stories_with_index = enumerate(_stories) if _stories else None  
+    return render_template('index.html', stories=_stories_with_index, current_user=current_user)
 
 
 def get_google_provider_cfg():
@@ -125,32 +134,32 @@ def callback():
         user_email = user_info_response.json()["email"]
         user_name = user_info_response.json()["given_name"]
         stories = []
-    else:
-        return "User email not available or not verified by Google.", 400
-    
-    # create a user in the database
-    user = User(
-        id_=unique_id, name=user_name, email=user_email, stories=stories
-    )
-    
-    # if a user doesn't exist add it to the database
-    if not User.get(unique_id):
-        User.create(unique_id, user_name, user_email, stories)
         
-    
-    # Begin user session by logging the user in
-    login_user(user=user)
-    
-    # Send user back to homepage
-    return redirect(url_for("index"))
+         # create a user in the database
+        user = User(
+            id_=unique_id, name=user_name, email=user_email, stories=stories
+        )
+        
+        # if a user doesn't exist add it to the database
+        if not User.get(unique_id):
+            User.create(unique_id, user_name, user_email, stories)
+        
+         # Begin user session by logging the user in
+        login_user(user=user, force=True)
+        
+        # Send user back to homepage
+        return redirect(url_for("index"))        
+        
+    else:
+        return "User email not available or not verified by Google.", 400    
 
 
 # logout logic
 @app.route("/logout")
 @login_required
 def logout():
-    logout_user()
     session.clear()
+    logout_user()
     return redirect(url_for("index"))
     
 
@@ -161,14 +170,33 @@ def generate_bedtime_story():
     api_key = os.getenv('OPENAI_API_KEY')
     temperature = os.getenv('TEMPERATURE')
 
-    # Generate story text
-    story_text = StoryGenerator.generate_story(api_key=api_key, temperature=temperature, title=title)
+    # Define a function to generate story text
+    def generate_story_text():
+        return StoryGenerator.generate_story(api_key=api_key, temperature=temperature, title=title)
 
-    # Generate image
-    image = ImageGenerator.generate_image(api_key=api_key, title=title)
+    # Define a function to generate image
+    def generate_image():
+        return ImageGenerator.generate_image(api_key=api_key, title=title)
 
-    # Generate audio
-    audio_content = AudioGenerator.generate_audio(text=story_text, api_key=api_key)
+    # Define a function to generate audio
+    def generate_audio(story_text):
+        return AudioGenerator.generate_audio(text=story_text, api_key=api_key)
+    
+    # Execute the tasks concurrently using ThreadPoolExecutor
+    with ThreadPoolExecutor() as executor:
+        # Submit the tasks
+        future_story_text = executor.submit(generate_story_text)
+        future_image = executor.submit(generate_image)
+        
+        # Wait for story text to complete and retrieve the result
+        story_text = future_story_text.result()
+
+        # Submit audio generation task with story text as argument
+        future_audio = executor.submit(generate_audio, story_text)
+
+        # Wait for image generation and audio generation to complete
+        image = future_image.result()
+        audio_content = future_audio.result()
 
     # Combine audio with image
     combined_audio_image = AudioImageCombiner.combine(audio_content=audio_content, image_data=image)
@@ -180,7 +208,7 @@ def generate_bedtime_story():
             "title": title,
             "story_text": story_text
         }
-        print(story_object)
+
         # Retrieve the current user's record
         user = User.get(current_user.id)
         
@@ -193,12 +221,9 @@ def generate_bedtime_story():
     
     # Encode the combined_audio_image using base64 encoding
     combined_audio_image_base64 = base64.b64encode(combined_audio_image).decode('utf-8')
-    
-    lz = lzstring.LZString()
-    story_data = lz.compressToBase64(title + '\n' + story_text + '\n' + combined_audio_image_base64)
 
     # Return combined audio with image
-    return jsonify({"story_data": story_data, "audio_with_image": combined_audio_image_base64, "story_text": story_text})
+    return jsonify({"message": "Success!", "audio_with_image": combined_audio_image_base64, "story_text": story_text})
 
 # generate video from stored image and story text
 @app.route('/view_story', methods=['POST'])
@@ -208,22 +233,29 @@ def view_story():
     story_text = data.get('story_text')
     api_key = os.getenv('OPENAI_API_KEY')
     
-    image = ImageGenerator.generate_image(api_key=api_key, title=title)
+    # Define a function to generate audio content and image concurrently
+    def generate_audio_image():
+        # Generate image
+        image = ImageGenerator.generate_image(api_key=api_key, title=title)
 
-    # Generate audio
-    audio_content = AudioGenerator.generate_audio(text=story_text, api_key=api_key)
+        # Generate audio
+        audio_content = AudioGenerator.generate_audio(text=story_text, api_key=api_key)
+
+        return audio_content, image
+    
+    # Execute the function concurrently
+    with ThreadPoolExecutor() as executor:
+        future = executor.submit(generate_audio_image)
+        audio_content, image = future.result()  # Wait for both tasks to complete
 
     # Combine audio with image
     combined_audio_image = AudioImageCombiner.combine(audio_content=audio_content, image_data=image)
     
     # Encode the combined_audio_image using base64 encoding
     combined_audio_image_base64 = base64.b64encode(combined_audio_image).decode('utf-8')
-    
-    lz = lzstring.LZString()
-    story_data = lz.compressToBase64(title + '\n' + story_text + '\n' + combined_audio_image_base64)
 
     # Return combined audio with image
-    return jsonify({"story_data": story_data, "audio_with_image": combined_audio_image_base64 })
+    return jsonify({"message": "Success!", "audio_with_image": combined_audio_image_base64 })
 
 
 # route to delete a story

@@ -20,5 +20,5 @@ class DatabaseInitializer:
 
             return conn
         except OperationalError as e:
-            print(f"Error: {e}")
+            #print(f"Error: {e}")
             print("PostgreSQL connection failed")
