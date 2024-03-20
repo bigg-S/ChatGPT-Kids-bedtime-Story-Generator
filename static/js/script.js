@@ -422,7 +422,7 @@ async function viewStory(story) {
 
             location.reload();
         } else {
-            document.getElementById('videoDisplay').innerHTML = '<p class="error-message">Error loading video.</p>';
+            document.getElementById('videoDisplay').appendChild('<p class="error-message">Error loading video.</p>');
             throw new Error('Timeout exceeded');
         }
         
@@ -444,10 +444,6 @@ function deleteStory(story, index) {
         isRequestInProgress = false;
         return; 
     }
-
-    const currTitle = JSON.parse(localStorage.getItem('currentTitle'));
-    console.log(currTitle);
-    console.log(story.title);
 
     if(JSON.parse(localStorage.getItem('currentTitle')) === story.title) {
         clearObjectStore();
