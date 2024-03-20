@@ -1,0 +1,29 @@
+README
+
+project url: https://github.com/bigg-S/ChatGPT-Kids-bedtime-Story-Generator.git
+
+Prerequisites:
+	Ensure you have 'Git', 'Python' and 'Node.js' installed in your computer
+
+Set Up:
+	1. Clone the repository to your computer using the command
+		'git clone <link to the repository>' on your git terminal
+		in the directory you want the project be in.
+		or download the project zip from GitHub (preferred for non programmers)
+	2.  If you downloaded the project zip:
+		unzip the project into your preferred directory
+		right click in the directory and select 'Git Bash Here' from the context menu
+		After the git terminal is launched, type in 'python get-pip.py' and hit Enter (to download pip)
+		Once the command above is done, type 'python -m venv venv' and hit Enter (to create a virtual environment)
+		After the command above is done executing, still in the terminal, type 'source venv/Scripts/activate' and hit Enter. (activate virtual environment)
+		Afetr this, go ahead and type 'pip install -r requirements.txt' (install project dependencies)
+		Once the requirements are installed, type 'cd static' and hit Enter (template folder)
+		In this directory, type in, 'npm install' (install template dependencies)
+		Once the above command is done, type in 'cd ..' and hit Enter (back to the root directory)
+		In the current directory, type in 'python main.py' to start the server.
+		Once the server is running, copy the url 'https://127.0.0.1:5000' and paste it in the browser search field and hit Enter.
+		You have successfully run the application!
+		
+		
+		If you cloned the repository, Navigate to the directory where it is cloned and follow the steps above.
+		
