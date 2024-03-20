@@ -30,7 +30,7 @@
             <button onclick="window.location.href='http://www.frankywright.com/'" class="block w-full text-left py-2 px-4 mb-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:bg-blue-600">Home</button>
 
             <!-- Logout Button (Visible when signed in) -->
-            <button onclick="window.location.href='/logout'" class="block w-full text-left py-2 px-4 mb-2 bg-red-500 text-white rounded-lg hover:bg-red-600 focus:outline-none focus:bg-red-600" {% if current_user.is_authenticated %} style="display: block" {% else %} style="display: none" {% endif %}>Logout</button>
+            <button onclick="logout()" class="block w-full text-left py-2 px-4 mb-2 bg-red-500 text-white rounded-lg hover:bg-red-600 focus:outline-none focus:bg-red-600" {% if current_user.is_authenticated %} style="display: block" {% else %} style="display: none" {% endif %}>Logout</button>
             <!-- Sign in Button (Visible when signed out) -->
             <button onclick="window.location.href='/login'" class="block w-full text-left py-2 px-4 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none focus:bg-green-600" {% if not current_user.is_authenticated %} style="display: block" {% else %} style="display: none" {% endif %}>Sign in</button>
         </div>
@@ -86,7 +86,7 @@
                                         <p class="text-md font-bold text-gray-800">{{ story.title }}</p>
                                         <div class="flex items-center">
                                             <button onclick="viewStory({{ story }})" class="bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 focus:outline-none focus:bg-green-600 mr-2">View</button>
-                                            <button onclick="deleteStory({{ index }})" class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-600 focus:outline-none focus:bg-red-600">Delete</button>
+                                            <button onclick="deleteStory({{ story }}, {{ index }})" class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-600 focus:outline-none focus:bg-red-600">Delete</button>
                                         </div>
                                     </div>
                                     {% if not loop.last %}
@@ -146,7 +146,11 @@
         window.onload = function() {
                 clearTitleInput();
                 const title = JSON.parse(localStorage.getItem('currentTitle'));
-                retrieveDataFromIndexedDB(title);
+                
+                if(title) {
+                    retrieveDataFromIndexedDB(title);
+                }
+                
             }
         
     </script>

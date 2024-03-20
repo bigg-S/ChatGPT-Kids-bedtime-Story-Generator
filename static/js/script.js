@@ -36,6 +36,18 @@ function toggleVideoLoadingState() {
     `;
 }
 
+// function to handle logout
+function logout() {
+    clearObjectStore();
+
+    localStorage.clear();
+    
+    location.reload();
+    
+    // Perform logout action
+    window.location.href = '/logout';
+}
+
 // Function to perform request with polling for async tasks
 async function performRequestWithPolling(url, requestData, loadingStateFunction) {
     if (isRequestInProgress) return;
@@ -127,6 +139,8 @@ async function generateStory() {
     if (videoElement) {
         videoElement.remove();
     }
+
+    clearObjectStore();
 
     // Disable the "Generate" button
     document.getElementById('generateButton').disabled = true;
@@ -272,7 +286,7 @@ async function clearObjectStore() {
     const store = tx.objectStore('stories');
     
     // Clear the object store
-    store.clear();
+    await store.clear();
 
     // Complete the transaction
     await tx.complete;
@@ -388,24 +402,38 @@ async function viewStory(story) {
 
         toggleVideoLoadingState();
         
-        // Call the view_story route
-        const data = await performRequestWithPolling('/view_story', requestData, toggleVideoLoadingState);
+        // Set a timeout for 2 minutes
+        const timeoutPromise = new Promise((resolve, reject) => {
+            setTimeout(() => {
+                reject(new Error('Timeout exceeded'));
+            }, 180000); // 3 minutes
+        });
+
+        // Call the view_story route with timeout
+        const dataPromise = performRequestWithPolling('/view_story', requestData, toggleVideoLoadingState);
+        
+        // Wait for either the data or the timeout
+        const data = await Promise.race([dataPromise, timeoutPromise]);
+        
         if(data) {
             displayVideo(data.audio_with_image);
 
             storeDataInIndexedDB(story.title, story.story_text, data.audio_with_image);
 
             location.reload();
+        } else {
+            document.getElementById('videoDisplay').innerHTML = '<p class="error-message">Error loading video.</p>';
+            throw new Error('Timeout exceeded');
         }
         
     } catch(error) {
-        document.getElementById('videoDisplay').appendChild('<p class="error-message">Error loading video.</p>');
+        document.getElementById('videoDisplay').innerHTML = '<p class="error-message">Error loading video.</p>';
         console.log(error)
     }
 }
 
 // delete a story
-function deleteStory(index) {
+function deleteStory(story, index) {
     if(isRequestInProgress) {
         return;
     }
@@ -415,6 +443,15 @@ function deleteStory(index) {
     if (!confirmed) {
         isRequestInProgress = false;
         return; 
+    }
+
+    const currTitle = JSON.parse(localStorage.getItem('currentTitle'));
+    console.log(currTitle);
+    console.log(story.title);
+
+    if(JSON.parse(localStorage.getItem('currentTitle')) === story.title) {
+        clearObjectStore();
+        localStorage.clear();
     }
 
     isRequestInProgress = true;
@@ -485,7 +522,7 @@ observer.observe(document.getElementById('videoDisplay'), { childList: true });
 function createScrollToTopButton() {
     if (!isScrollToTopButtonCreated) {
         const scrollToTopButton = document.createElement('button');
-        scrollToTopButton.textContent = 'Scroll to Top';
+        scrollToTopButton.textContent = 'Back to Top';
         scrollToTopButton.onclick = scrollToTop;
         scrollToTopButton.classList.add(
             'fixed',
@@ -493,8 +530,6 @@ function createScrollToTopButton() {
             'right-4',
             'bg-blue-500',
             'text-white',
-            'py-2',
-            'px-4',
             'rounded-lg',
             'hover:bg-blue-600',
             'focus:outline-none',

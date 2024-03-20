@@ -2,6 +2,7 @@ import os
 import json
 import base64
 import requests
+import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from flask import Flask, jsonify, request, render_template, redirect, session, url_for, abort
@@ -125,7 +126,7 @@ def callback():
     uri, headers, body = client.add_token(user_info_endpoint)
     user_info_response = requests.get(uri, headers=headers, data=body)
     
-    # You want to make sure their email is verified.
+    # make sure their email is verified.
     # The user authenticated with Google, authorized your
     # app, and now you've verified their email through Google
     
@@ -164,43 +165,41 @@ def logout():
     
 
 @app.route('/generate_bedtime_story', methods=['POST'])
-def generate_bedtime_story():
+async def generate_bedtime_story():
     data = request.get_json()
     title = data.get('title')
     api_key = os.getenv('OPENAI_API_KEY')
     temperature = os.getenv('TEMPERATURE')
 
-    # Define a function to generate story text
-    def generate_story_text():
+    # Create a coroutine for generating story text
+    async def generate_story_text():
         return StoryGenerator.generate_story(api_key=api_key, temperature=temperature, title=title)
 
-    # Define a function to generate image
-    def generate_image():
-        return ImageGenerator.generate_image(api_key=api_key, title=title)
+    # Create a coroutine for generating audio
+    async def generate_audio(story_text):
+        return await asyncio.to_thread(
+            AudioGenerator.generate_audio, text=story_text, api_key=api_key
+        )
 
-    # Define a function to generate audio
-    def generate_audio(story_text):
-        return AudioGenerator.generate_audio(text=story_text, api_key=api_key)
-    
-    # Execute the tasks concurrently using ThreadPoolExecutor
-    with ThreadPoolExecutor() as executor:
-        # Submit the tasks
-        future_story_text = executor.submit(generate_story_text)
-        future_image = executor.submit(generate_image)
-        
-        # Wait for story text to complete and retrieve the result
-        story_text = future_story_text.result()
+    # Run story text generation asynchronously
+    story_text = await generate_story_text()
 
-        # Submit audio generation task with story text as argument
-        future_audio = executor.submit(generate_audio, story_text)
+    # Start audio generation concurrently with story text generation
+    audio_task = asyncio.create_task(generate_audio(story_text))
 
-        # Wait for image generation and audio generation to complete
-        image = future_image.result()
-        audio_content = future_audio.result()
+    # Generate image (non-blocking)
+    image = await asyncio.to_thread(
+        ImageGenerator.generate_image, api_key=api_key, title=title
+    )
+
+    # Wait for audio generation to complete
+    audio_content = await audio_task
 
     # Combine audio with image
-    combined_audio_image = AudioImageCombiner.combine(audio_content=audio_content, image_data=image)
-    
+    combined_audio_image = await asyncio.to_thread(
+        AudioImageCombiner.combine, audio_content=audio_content, image_data=image
+    )
+
     # Save story to database if a user is signed in
     if current_user.is_authenticated:
         # Construct the story object
@@ -208,7 +207,6 @@ def generate_bedtime_story():
             "title": title,
             "story_text": story_text
         }
-
         # Retrieve the current user's record
         user = User.get(current_user.id)
         
@@ -217,13 +215,12 @@ def generate_bedtime_story():
         
         # Save the user with the updated stories array
         user.save()
-       
-    
+
     # Encode the combined_audio_image using base64 encoding
     combined_audio_image_base64 = base64.b64encode(combined_audio_image).decode('utf-8')
 
     # Return combined audio with image
-    return jsonify({"message": "Success!", "audio_with_image": combined_audio_image_base64, "story_text": story_text})
+    return jsonify({"message": "Bedtime story generated successfully!", "audio_with_image": combined_audio_image_base64, "story_text": story_text})
 
 # generate video from stored image and story text
 @app.route('/view_story', methods=['POST'])
